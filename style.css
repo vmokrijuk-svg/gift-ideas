@@ -48,7 +48,61 @@ h1 { font-size: 24px; margin: 0; }
 #status-bar.warn { color: #ff9500; }
 #status-bar.error { color: #ff3b30; }
 
-/* Toolbar: поиск, фильтр, сортировка */
+/* Блок "Скоро" */
+#upcoming {
+  margin-bottom: 20px;
+}
+
+.upcoming-block {
+  background: linear-gradient(135deg, #fff4e6 0%, #ffe8d6 100%);
+  border-radius: 14px;
+  padding: 14px 18px;
+  border-left: 4px solid #ff9500;
+}
+
+.upcoming-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ff9500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.upcoming-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 0;
+  font-size: 14px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.upcoming-item .left {
+  color: #1d1d1f;
+}
+
+.upcoming-item .person {
+  font-weight: 600;
+}
+
+.upcoming-item .right {
+  color: #86868b;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.upcoming-item .days {
+  color: #ff9500;
+  font-weight: 600;
+}
+
+.upcoming-item .days.urgent {
+  color: #ff3b30;
+}
+
+/* Toolbar */
 #toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -323,6 +377,15 @@ h1 { font-size: 24px; margin: 0; }
 }
 
 .card button.bought { background: #34c759; color: white; }
+
+.card-meta {
+  font-size: 12px;
+  color: #86868b;
+}
+
+.card-meta .holiday {
+  color: #ff9500;
+}
 
 .empty-message {
   color: #86868b;
