@@ -8,6 +8,10 @@ var COLLAPSED_KEY = 'giftCollapsedGroups';
 var SORT_KEY = 'giftSortMode';
 var LAST_MODIFIED_KEY = 'giftLastModified';
 
+// ========== СОСТОЯНИЕ ФИЛЬТРОВ (в памяти) ==========
+var searchQuery = '';
+var filterNotBought = false;
+
 // ========== ЛОГ ==========
 function log(msg, type) {
   try {
@@ -112,7 +116,7 @@ function setLastModified(iso) {
   localStorage.setItem(LAST_MODIFIED_KEY, iso);
 }
 
-// ========== МИГРАЦИЯ ИЗ СТАРЫХ ДАННЫХ ==========
+// ========== МИГРАЦИЯ ==========
 function migratePeople() {
   var people = loadPeople();
   if (people.length > 0) return people;
@@ -130,6 +134,58 @@ function migratePeople() {
   if (result.length > 0) {
     savePeople(result);
     log('Мигрировано людей: ' + result.length, 'ok');
+  }
+  return result;
+}
+
+// ========== ЦЕНЫ И СУММЫ ==========
+function parsePrice(price) {
+  if (!price) return 0;
+  var cleaned = String(price).replace(/[^\d.,]/g, '').replace(',', '.');
+  var num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
+
+function formatSum(num) {
+  return num.toLocaleString('ru-RU') + ' ₽';
+}
+
+function sumPrices(ideas) {
+  var total = 0;
+  for (var i = 0; i < ideas.length; i++) {
+    total += parsePrice(ideas[i].price);
+  }
+  return total;
+}
+
+// ========== ФИЛЬТРЫ ==========
+function onSearchInput(e) {
+  searchQuery = (e.target.value || '').toLowerCase().trim();
+  render();
+}
+
+function applySearch(ideas) {
+  if (!searchQuery) return ideas;
+  var result = [];
+  for (var i = 0; i < ideas.length; i++) {
+    var idea = ideas[i];
+    var haystack = (
+      (idea.person || '') + ' ' +
+      (idea.title || '') + ' ' +
+      (idea.occasion || '')
+    ).toLowerCase();
+    if (haystack.indexOf(searchQuery) !== -1) {
+      result.push(idea);
+    }
+  }
+  return result;
+}
+
+function applyStatusFilter(ideas) {
+  if (!filterNotBought) return ideas;
+  var result = [];
+  for (var i = 0; i < ideas.length; i++) {
+    if (!ideas[i].bought) result.push(ideas[i]);
   }
   return result;
 }
@@ -244,14 +300,12 @@ function handleSubmit(e) {
       data[inputs[i].name] = (inputs[i].value || '').trim();
     }
 
-    // Если введён новый человек — используем его, иначе выбранного из списка
     var person = data.newPerson || data.person;
     if (!person) {
       alert('Укажите, для кого идея.');
       return false;
     }
 
-    // Если новый человек — добавляем в справочник
     if (data.newPerson) {
       var people = loadPeople();
       if (people.indexOf(person) === -1) {
@@ -310,14 +364,7 @@ function handleSubmit(e) {
   return false;
 }
 
-// ========== Сортировка ==========
-function parsePrice(price) {
-  if (!price) return 0;
-  var cleaned = String(price).replace(/[^\d.,]/g, '').replace(',', '.');
-  var num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
-}
-
+// ========== СОРТИРОВКА ==========
 function sortIdeas(ideas) {
   var mode = loadSortMode();
   var sorted = ideas.slice();
@@ -350,27 +397,62 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+function plural(n, one, few, many) {
+  var mod10 = n % 10;
+  var mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
 function render() {
   try {
     var container = document.getElementById('ideas-container');
-    var ideas = loadIdeas();
-    var people = loadPeople();
+    var totalsEl = document.getElementById('totals');
+    var allIdeas = loadIdeas();
+
+    // Идеи, отфильтрованные по поиску (но БЕЗ фильтра по статусу) — для подсчёта итогов
+    var searchedIdeas = applySearch(allIdeas);
+
+    // Идеи, отфильтрованные по поиску И статусу — для отображения
+    var visibleIdeas = applyStatusFilter(searchedIdeas);
+
+    // ---- Итоговые суммы ----
+    var totalSum = sumPrices(searchedIdeas);
+    var notBoughtIdeas = [];
+    for (var t = 0; t < searchedIdeas.length; t++) {
+      if (!searchedIdeas[t].bought) notBoughtIdeas.push(searchedIdeas[t]);
+    }
+    var notBoughtSum = sumPrices(notBoughtIdeas);
+
+    if (searchedIdeas.length > 0) {
+      totalsEl.innerHTML =
+        '<span>Всего: <strong>' + formatSum(totalSum) + '</strong></span>' +
+        '<span>Не куплено: <strong>' + formatSum(notBoughtSum) + '</strong></span>';
+    } else {
+      totalsEl.innerHTML = '';
+    }
+
     container.innerHTML = '';
 
-    if (ideas.length === 0) {
-      container.innerHTML = '<p style="color:#86868b">Пока пусто. Нажмите «+ Добавить».</p>';
+    if (visibleIdeas.length === 0) {
+      if (allIdeas.length === 0) {
+        container.innerHTML = '<p class="empty-message">Пока пусто. Нажмите «+ Добавить».</p>';
+      } else if (searchQuery || filterNotBought) {
+        container.innerHTML = '<p class="empty-message">Ничего не найдено по заданным условиям.</p>';
+      }
       return;
     }
 
-    // Считаем статистику по людям
+    // ---- Группировка ----
     var groups = {};
-    for (var i = 0; i < ideas.length; i++) {
-      var p = (ideas[i].person || '').trim() || 'Без категории';
+    for (var i = 0; i < visibleIdeas.length; i++) {
+      var p = (visibleIdeas[i].person || '').trim() || 'Без категории';
       if (!groups[p]) groups[p] = [];
-      groups[p].push(ideas[i]);
+      groups[p].push(visibleIdeas[i]);
     }
 
-    // Список людей, отсортированный по количеству идей (по убыванию)
+    // Сортируем людей по количеству идей (по убыванию), при равенстве — по алфавиту
     var peopleList = Object.keys(groups);
     peopleList.sort(function(a, b) {
       var diff = groups[b].length - groups[a].length;
@@ -380,29 +462,23 @@ function render() {
 
     var collapsed = loadCollapsed();
 
-    // Контрол сортировки
-    var sortMode = loadSortMode();
-    var controls = document.createElement('div');
-    controls.className = 'sort-controls';
-    controls.innerHTML =
-      '<span>Сортировка внутри групп:</span>' +
-      '<select onchange="changeSortMode(this.value)">' +
-        '<option value="date"' + (sortMode === 'date' ? ' selected' : '') + '>По дате</option>' +
-        '<option value="sum"' + (sortMode === 'sum' ? ' selected' : '') + '>По сумме</option>' +
-      '</select>';
-    container.appendChild(controls);
-
-    // Рендер групп
+    // ---- Рендер групп ----
     for (var g = 0; g < peopleList.length; g++) {
       var person = peopleList[g];
       var personIdeas = groups[person];
-      var bought = 0;
+
+      var boughtCount = 0;
       for (var b = 0; b < personIdeas.length; b++) {
-        if (personIdeas[b].bought) bought++;
+        if (personIdeas[b].bought) boughtCount++;
       }
+      var personSum = sumPrices(personIdeas);
 
       var group = document.createElement('div');
       group.className = 'group' + (collapsed[person] ? ' collapsed' : '');
+
+      var metaParts = [personIdeas.length + ' ' + plural(personIdeas.length, 'идея', 'идеи', 'идей')];
+      if (boughtCount > 0) metaParts.push(boughtCount + ' куплено');
+      if (personSum > 0) metaParts.push(formatSum(personSum));
 
       var header = document.createElement('div');
       header.className = 'group-header';
@@ -410,7 +486,7 @@ function render() {
       header.innerHTML =
         '<span class="toggle-icon">▼</span>' +
         '<h2>' + escapeHtml(person) + '</h2>' +
-        '<span class="group-meta">' + personIdeas.length + ' ' + plural(personIdeas.length, 'идея', 'идеи', 'идей') + ', ' + bought + ' куплено</span>';
+        '<span class="group-meta">' + metaParts.join(' · ') + '</span>';
       group.appendChild(header);
 
       var grid = document.createElement('div');
@@ -428,14 +504,6 @@ function render() {
     log('Ошибка рендера: ' + err.message, 'error');
     showLog();
   }
-}
-
-function plural(n, one, few, many) {
-  var mod10 = n % 10;
-  var mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
-  return many;
 }
 
 function buildCard(idea) {
@@ -533,6 +601,10 @@ function resetAll() {
   localStorage.removeItem(PEOPLE_KEY);
   localStorage.removeItem(COLLAPSED_KEY);
   localStorage.removeItem(LAST_MODIFIED_KEY);
+  searchQuery = '';
+  filterNotBought = false;
+  document.getElementById('search-input').value = '';
+  document.getElementById('filter-not-bought').checked = false;
   log('Все данные удалены', 'ok');
   render();
 }
@@ -671,7 +743,7 @@ function handleImportFile(event) {
 function fetchGitHubBackup() {
   log('Проверяю бэкап на GitHub...');
 
-  var url = GITHUB_RAW_URL + '?t=' + Date.now(); // обход кэша
+  var url = GITHUB_RAW_URL + '?t=' + Date.now();
 
   fetch(url)
     .then(function(response) {
@@ -689,7 +761,6 @@ function fetchGitHubBackup() {
       log('GitHub: ' + data.ideas.length + ' идей, изменён ' + remoteTime);
       log('Локально: ' + loadIdeas().length + ' идей, изменён ' + (localTime || 'никогда'));
 
-      // Если удалённый новее — предлагаем загрузить
       if (remoteTime && (!localTime || remoteTime > localTime)) {
         var remoteDate = new Date(remoteTime).toLocaleString('ru-RU');
         var msg = 'В GitHub есть более свежие данные (от ' + remoteDate + ').\n\n' +
@@ -714,7 +785,6 @@ function fetchGitHubBackup() {
         }
       }
 
-      // Локальные новее или одинаковые
       if (localTime && remoteTime && localTime > remoteTime) {
         setStatus('Локальные данные новее, чем в GitHub. Не забудьте экспортировать.', 'warn');
       } else {
@@ -745,9 +815,17 @@ function fetchGitHubBackup() {
     log('Идей в хранилище: ' + loadIdeas().length);
     log('Людей в справочнике: ' + loadPeople().length);
 
+    // Инициализация сортировки
+    document.getElementById('sort-select').value = loadSortMode();
+
+    // Фильтр "только не купленные"
+    document.getElementById('filter-not-bought').addEventListener('change', function(e) {
+      filterNotBought = e.target.checked;
+      render();
+    });
+
     render();
 
-    // Асинхронная проверка GitHub (не блокирует интерфейс)
     fetchGitHubBackup();
 
     document.getElementById('form-overlay').addEventListener('click', function(e) {
@@ -782,3 +860,4 @@ window.deletePerson = deletePerson;
 window.exportData = exportData;
 window.importData = importData;
 window.handleImportFile = handleImportFile;
+window.onSearchInput = onSearchInput;
