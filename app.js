@@ -824,6 +824,9 @@ function fetchGitHubBackup() {
       render();
     });
 
+    // Поиск
+    document.getElementById('search-input').addEventListener('input', onSearchInput);
+
     render();
 
     fetchGitHubBackup();
@@ -860,4 +863,3 @@ window.deletePerson = deletePerson;
 window.exportData = exportData;
 window.importData = importData;
 window.handleImportFile = handleImportFile;
-window.onSearchInput = onSearchInput;
