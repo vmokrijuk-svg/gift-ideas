@@ -16,8 +16,7 @@
     <h1>🎁 Идеи подарков</h1>
     <div class="header-actions">
       <button type="button" onclick="openPeopleManager()" title="Справочник людей">⚙️</button>
-      <button type="button" onclick="exportData()" title="Скачать JSON">📤</button>
-      <button type="button" onclick="importData()" title="Загрузить JSON">📥</button>
+      <button type="button" onclick="openExportModal()" title="Синхронизация">📤</button>
       <button type="button" onclick="resetAll()" title="Сбросить всё">⟲</button>
       <button type="button" onclick="openForm()">+ Добавить</button>
     </div>
@@ -25,21 +24,34 @@
 
   <div id="status-bar"></div>
 
-  <div id="upcoming"></div>
-
-  <div id="toolbar">
-    <input type="search" id="search-input" placeholder="Поиск по имени, названию, поводу..." autocomplete="off">
-    <label class="filter-label">
-      <input type="checkbox" id="filter-not-bought">
-      Только не купленные
-    </label>
-    <select id="sort-select" onchange="changeSortMode(this.value)">
-      <option value="date">Сначала новые</option>
-      <option value="sum">Сначала дорогие</option>
-    </select>
+  <div id="view-tabs">
+    <button type="button" id="tab-list" class="view-tab active" onclick="switchView('list')">📋 Список</button>
+    <button type="button" id="tab-calendar" class="view-tab" onclick="switchView('calendar')">📅 Календарь</button>
   </div>
 
-  <div id="totals"></div>
+  <div id="view-list">
+    <div id="upcoming"></div>
+
+    <div id="toolbar">
+      <input type="search" id="search-input" placeholder="Поиск по имени, названию, поводу..." autocomplete="off">
+      <label class="filter-label">
+        <input type="checkbox" id="filter-not-bought">
+        Только не купленные
+      </label>
+      <select id="sort-select" onchange="changeSortMode(this.value)">
+        <option value="date">Сначала новые</option>
+        <option value="sum">Сначала дорогие</option>
+      </select>
+    </div>
+
+    <div id="totals"></div>
+
+    <main id="ideas-container"></main>
+  </div>
+
+  <div id="view-calendar" style="display:none">
+    <div id="calendar-container"></div>
+  </div>
 
   <div id="form-overlay" style="display:none">
     <form id="idea-form" onsubmit="return handleSubmit(event)">
@@ -84,6 +96,9 @@
       <label>Цена:
         <input type="text" name="price" placeholder="4 990 ₽">
       </label>
+      <label>Заметки (размер, цвет, где купить...):
+        <textarea name="notes" rows="3" placeholder="Свободный текст"></textarea>
+      </label>
 
       <div class="form-actions">
         <button type="button" onclick="closeForm()">Отмена</button>
@@ -102,7 +117,31 @@
     </div>
   </div>
 
-  <main id="ideas-container"></main>
+  <div id="export-modal-overlay" style="display:none">
+    <div id="export-modal">
+      <h2>Синхронизация с GitHub</h2>
+      <p class="export-hint">Выберите, что делать. Файлы ideas.json нужны для корня репозитория, а архивы — для папки backups/.</p>
+
+      <button type="button" class="primary" onclick="exportData()">
+        <span class="export-button-title">📤 Скачать ideas.json</span>
+        <span class="export-button-sub">Обновить текущую версию в корне репозитория</span>
+      </button>
+
+      <button type="button" onclick="exportDataWithDate()">
+        <span class="export-button-title">📦 Скачать архив с датой</span>
+        <span class="export-button-sub">Положить в папку backups/ на случай отката</span>
+      </button>
+
+      <button type="button" onclick="importData()">
+        <span class="export-button-title">📥 Импортировать из файла</span>
+        <span class="export-button-sub">Загрузить JSON с устройства</span>
+      </button>
+
+      <div class="form-actions">
+        <button type="button" onclick="closeExportModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
 
   <div id="debug-log">
     <div class="log-header">
