@@ -24,6 +24,20 @@
 
   <div id="status-bar"></div>
 
+  <div id="toolbar">
+    <input type="search" id="search-input" placeholder="Поиск по имени, названию, поводу..." autocomplete="off" oninput="onSearchInput(event)">
+    <label class="filter-label">
+      <input type="checkbox" id="filter-not-bought">
+      Только не купленные
+    </label>
+    <select id="sort-select" onchange="changeSortMode(this.value)">
+      <option value="date">Сначала новые</option>
+      <option value="sum">Сначала дорогие</option>
+    </select>
+  </div>
+
+  <div id="totals"></div>
+
   <div id="form-overlay" style="display:none">
     <form id="idea-form" onsubmit="return handleSubmit(event)">
       <input type="hidden" name="id" value="">
