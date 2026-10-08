@@ -49,9 +49,7 @@ h1 { font-size: 24px; margin: 0; }
 #status-bar.error { color: #ff3b30; }
 
 /* Блок "Скоро" */
-#upcoming {
-  margin-bottom: 20px;
-}
+#upcoming { margin-bottom: 20px; }
 
 .upcoming-block {
   background: linear-gradient(135deg, #fff4e6 0%, #ffe8d6 100%);
@@ -79,28 +77,18 @@ h1 { font-size: 24px; margin: 0; }
   flex-wrap: wrap;
 }
 
-.upcoming-item .left {
-  color: #1d1d1f;
-}
-
-.upcoming-item .person {
-  font-weight: 600;
-}
-
+.upcoming-item .left { color: #1d1d1f; }
+.upcoming-item .person { font-weight: 600; }
 .upcoming-item .right {
   color: #86868b;
   font-size: 13px;
   white-space: nowrap;
 }
-
 .upcoming-item .days {
   color: #ff9500;
   font-weight: 600;
 }
-
-.upcoming-item .days.urgent {
-  color: #ff3b30;
-}
+.upcoming-item .days.urgent { color: #ff3b30; }
 
 /* Toolbar */
 #toolbar {
@@ -270,33 +258,70 @@ h1 { font-size: 24px; margin: 0; }
   align-items: center;
   padding: 10px;
   background: #f5f5f7;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 15px;
+  gap: 8px;
 }
 
-.person-row button {
-  background: #ff3b30;
-  color: white;
+.person-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.person-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.person-avatar-placeholder {
+  background: #d2d2d7;
+  color: #86868b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.person-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.person-actions button {
+  background: #e8e8ed;
+  color: #1d1d1f;
   border: none;
   border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 7px 10px;
+  font-size: 13px;
   cursor: pointer;
 }
 
-.person-row button:disabled {
+.person-actions button.danger {
+  background: #ff3b30;
+  color: white;
+}
+
+.person-actions button:disabled {
   background: #d2d2d7;
+  color: #86868b;
   cursor: not-allowed;
 }
 
 /* Группы и карточки */
-.group {
-  margin-bottom: 28px;
-}
+.group { margin-bottom: 28px; }
 
 .group-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   cursor: pointer;
   user-select: none;
@@ -322,6 +347,14 @@ h1 { font-size: 24px; margin: 0; }
   transition: transform 0.15s;
 }
 
+.group-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
 .group.collapsed .toggle-icon { transform: rotate(-90deg); }
 .group.collapsed .cards-grid { display: none; }
 
@@ -339,7 +372,11 @@ h1 { font-size: 24px; margin: 0; }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: opacity 0.15s;
 }
+
+.card.bought { opacity: 0.6; }
+.card.bought img { filter: grayscale(0.6); }
 
 .card img {
   width: 100%;
@@ -383,9 +420,7 @@ h1 { font-size: 24px; margin: 0; }
   color: #86868b;
 }
 
-.card-meta .holiday {
-  color: #ff9500;
-}
+.card-meta .holiday { color: #ff9500; }
 
 .empty-message {
   color: #86868b;
