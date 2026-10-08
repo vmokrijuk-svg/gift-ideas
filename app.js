@@ -1,5 +1,7 @@
 // ========== КОНФИГУРАЦИЯ ==========
 var GITHUB_RAW_URL = 'https://raw.githubusercontent.com/vmokrijuk-svg/gift-ideas/main/ideas.json';
+var UPCOMING_DAYS_WINDOW = 90;
+var UPCOMING_MAX_ITEMS = 5;
 
 // ========== КЛЮЧИ ХРАНИЛИЩА ==========
 var STORAGE_KEY = 'giftIdeas';
@@ -8,7 +10,7 @@ var COLLAPSED_KEY = 'giftCollapsedGroups';
 var SORT_KEY = 'giftSortMode';
 var LAST_MODIFIED_KEY = 'giftLastModified';
 
-// ========== СОСТОЯНИЕ ФИЛЬТРОВ (в памяти) ==========
+// ========== СОСТОЯНИЕ ФИЛЬТРОВ ==========
 var searchQuery = '';
 var filterNotBought = false;
 
@@ -156,6 +158,124 @@ function sumPrices(ideas) {
     total += parsePrice(ideas[i].price);
   }
   return total;
+}
+
+// ========== ДАТЫ И ПРАЗДНИКИ ==========
+var MONTHS_GEN = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+
+function parseDateParts(dateStr) {
+  // Ожидаем "YYYY-MM-DD"
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  var parts = dateStr.split('-');
+  if (parts.length !== 3) return null;
+  var y = parseInt(parts[0], 10);
+  var m = parseInt(parts[1], 10);
+  var d = parseInt(parts[2], 10);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return { year: y, month: m - 1, day: d };
+}
+
+function formatHolidayShort(dateStr) {
+  var p = parseDateParts(dateStr);
+  if (!p) return '';
+  return p.day + ' ' + MONTHS_GEN[p.month];
+}
+
+function nextOccurrence(dateStr) {
+  var p = parseDateParts(dateStr);
+  if (!p) return null;
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  var year = today.getFullYear();
+  var candidate = new Date(year, p.month, p.day);
+  candidate.setHours(0, 0, 0, 0);
+  if (candidate.getTime() < today.getTime()) {
+    candidate = new Date(year + 1, p.month, p.day);
+    candidate.setHours(0, 0, 0, 0);
+  }
+  return candidate;
+}
+
+function daysUntil(date) {
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function humanDays(d) {
+  if (d === 0) return 'сегодня';
+  if (d === 1) return 'завтра';
+  if (d === 2) return 'послезавтра';
+  return 'через ' + d + ' ' + plural(d, 'день', 'дня', 'дней');
+}
+
+function plural(n, one, few, many) {
+  var mod10 = n % 10;
+  var mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
+function renderUpcoming() {
+  var container = document.getElementById('upcoming');
+  if (!container) return;
+  container.innerHTML = '';
+
+  var ideas = loadIdeas();
+  var groups = {};
+
+  for (var i = 0; i < ideas.length; i++) {
+    var idea = ideas[i];
+    if (!idea.date) continue;
+    var occ = nextOccurrence(idea.date);
+    if (!occ) continue;
+    var days = daysUntil(occ);
+    if (days < 0 || days > UPCOMING_DAYS_WINDOW) continue;
+    var key = (idea.person || '') + '|' + idea.date;
+    if (!groups[key]) {
+      groups[key] = {
+        person: idea.person || 'Без категории',
+        occasion: idea.occasion || '',
+        date: idea.date,
+        dateObj: occ,
+        days: days,
+        count: 0
+      };
+    }
+    groups[key].count++;
+  }
+
+  var list = [];
+  for (var k in groups) {
+    if (groups.hasOwnProperty(k)) list.push(groups[k]);
+  }
+
+  list.sort(function(a, b) { return a.days - b.days; });
+  list = list.slice(0, UPCOMING_MAX_ITEMS);
+
+  if (list.length === 0) return;
+
+  var block = document.createElement('div');
+  block.className = 'upcoming-block';
+
+  var html = '<div class="upcoming-title">🎂 Скоро</div>';
+
+  for (var j = 0; j < list.length; j++) {
+    var item = list[j];
+    var daysClass = item.days <= 3 ? 'days urgent' : 'days';
+    var occasionText = item.occasion ? ' — ' + escapeHtml(item.occasion) : '';
+    var countText = item.count > 1 ? ' · ' + item.count + ' ' + plural(item.count, 'идея', 'идеи', 'идей') : '';
+    html += '<div class="upcoming-item">' +
+      '<span class="left"><span class="person">' + escapeHtml(item.person) + '</span>' + occasionText + '</span>' +
+      '<span class="right"><span class="' + daysClass + '">' + humanDays(item.days) + '</span>' +
+      ' · ' + formatHolidayShort(item.date) + countText + '</span>' +
+      '</div>';
+  }
+
+  block.innerHTML = html;
+  container.appendChild(block);
 }
 
 // ========== ФИЛЬТРЫ ==========
@@ -324,6 +444,7 @@ function handleSubmit(e) {
         if (ideas[j].id === data.id) {
           ideas[j].person = person;
           ideas[j].occasion = data.occasion;
+          ideas[j].date = data.date;
           ideas[j].budget = data.budget;
           ideas[j].title = data.title;
           ideas[j].link = data.link;
@@ -340,6 +461,7 @@ function handleSubmit(e) {
         bought: false,
         person: person,
         occasion: data.occasion,
+        date: data.date,
         budget: data.budget,
         title: data.title,
         link: data.link,
@@ -397,27 +519,17 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-function plural(n, one, few, many) {
-  var mod10 = n % 10;
-  var mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
-  return many;
-}
-
 function render() {
   try {
+    renderUpcoming();
+
     var container = document.getElementById('ideas-container');
     var totalsEl = document.getElementById('totals');
     var allIdeas = loadIdeas();
 
-    // Идеи, отфильтрованные по поиску (но БЕЗ фильтра по статусу) — для подсчёта итогов
     var searchedIdeas = applySearch(allIdeas);
-
-    // Идеи, отфильтрованные по поиску И статусу — для отображения
     var visibleIdeas = applyStatusFilter(searchedIdeas);
 
-    // ---- Итоговые суммы ----
     var totalSum = sumPrices(searchedIdeas);
     var notBoughtIdeas = [];
     for (var t = 0; t < searchedIdeas.length; t++) {
@@ -444,7 +556,6 @@ function render() {
       return;
     }
 
-    // ---- Группировка ----
     var groups = {};
     for (var i = 0; i < visibleIdeas.length; i++) {
       var p = (visibleIdeas[i].person || '').trim() || 'Без категории';
@@ -452,7 +563,6 @@ function render() {
       groups[p].push(visibleIdeas[i]);
     }
 
-    // Сортируем людей по количеству идей (по убыванию), при равенстве — по алфавиту
     var peopleList = Object.keys(groups);
     peopleList.sort(function(a, b) {
       var diff = groups[b].length - groups[a].length;
@@ -462,7 +572,6 @@ function render() {
 
     var collapsed = loadCollapsed();
 
-    // ---- Рендер групп ----
     for (var g = 0; g < peopleList.length; g++) {
       var person = peopleList[g];
       var personIdeas = groups[person];
@@ -513,9 +622,16 @@ function buildCard(idea) {
   var html = '';
   if (idea.image) html += '<img src="' + escapeHtml(idea.image) + '" alt="">';
   html += '<div class="title">' + (escapeHtml(idea.title) || 'Без названия') + '</div>';
-  if (idea.occasion) html += '<div style="font-size:12px;color:#86868b">' + escapeHtml(idea.occasion) + '</div>';
+
+  var metaParts = [];
+  if (idea.occasion) metaParts.push(escapeHtml(idea.occasion));
+  if (idea.date) metaParts.push('<span class="holiday">🎂 ' + formatHolidayShort(idea.date) + '</span>');
+  if (metaParts.length > 0) {
+    html += '<div class="card-meta">' + metaParts.join(' · ') + '</div>';
+  }
+
   if (idea.price) html += '<div class="price">' + escapeHtml(idea.price) + '</div>';
-  if (idea.budget) html += '<div style="font-size:12px;color:#86868b">Бюджет: ' + escapeHtml(idea.budget) + ' ₽</div>';
+  if (idea.budget) html += '<div class="card-meta">Бюджет: ' + escapeHtml(idea.budget) + ' ₽</div>';
   if (idea.link) html += '<a href="' + escapeHtml(idea.link) + '" target="_blank" rel="noopener">Открыть ссылку</a>';
   html += '<div class="actions">';
   html += '<button type="button" class="' + (idea.bought ? 'bought' : '') + '" onclick="toggleBought(\'' + idea.id + '\')">' + (idea.bought ? '✓ Куплено' : 'Отметить купленным') + '</button>';
@@ -568,6 +684,7 @@ function editIdea(id) {
   form.querySelector('[name="id"]').value = idea.id;
   form.querySelector('[name="person"]').value = idea.person || '';
   form.querySelector('[name="occasion"]').value = idea.occasion || '';
+  form.querySelector('[name="date"]').value = idea.date || '';
   form.querySelector('[name="budget"]').value = idea.budget || '';
   form.querySelector('[name="title"]').value = idea.title || '';
   form.querySelector('[name="link"]').value = idea.link || '';
@@ -815,16 +932,13 @@ function fetchGitHubBackup() {
     log('Идей в хранилище: ' + loadIdeas().length);
     log('Людей в справочнике: ' + loadPeople().length);
 
-    // Инициализация сортировки
     document.getElementById('sort-select').value = loadSortMode();
 
-    // Фильтр "только не купленные"
     document.getElementById('filter-not-bought').addEventListener('change', function(e) {
       filterNotBought = e.target.checked;
       render();
     });
 
-    // Поиск
     document.getElementById('search-input').addEventListener('input', onSearchInput);
 
     render();
