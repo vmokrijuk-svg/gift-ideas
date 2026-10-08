@@ -9,12 +9,18 @@ var PEOPLE_KEY = 'giftPeople';
 var PHOTOS_KEY = 'giftPeoplePhotos';
 var COLLAPSED_KEY = 'giftCollapsedGroups';
 var SORT_KEY = 'giftSortMode';
+var VIEW_KEY = 'giftViewMode';
 var LAST_MODIFIED_KEY = 'giftLastModified';
 
 // ========== СОСТОЯНИЕ ==========
 var searchQuery = '';
 var filterNotBought = false;
 var currentPhotoPerson = null;
+var currentView = 'list';
+
+var _now = new Date();
+var calendarYear = _now.getFullYear();
+var calendarMonth = _now.getMonth();
 
 // ========== ЛОГ ==========
 function log(msg, type) {
@@ -136,12 +142,24 @@ function saveSortMode(mode) {
   localStorage.setItem(SORT_KEY, mode);
 }
 
+function loadViewMode() {
+  return localStorage.getItem(VIEW_KEY) || 'list';
+}
+
+function saveViewMode(mode) {
+  localStorage.setItem(VIEW_KEY, mode);
+}
+
 function getLastModified() {
   return localStorage.getItem(LAST_MODIFIED_KEY) || '';
 }
 
 function setLastModified(iso) {
   localStorage.setItem(LAST_MODIFIED_KEY, iso);
+}
+
+function pad2(n) {
+  return n < 10 ? '0' + n : String(n);
 }
 
 // ========== МИГРАЦИЯ ==========
@@ -188,6 +206,8 @@ function sumPrices(ideas) {
 
 // ========== ДАТЫ И ПРАЗДНИКИ ==========
 var MONTHS_GEN = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+var MONTHS_NOM = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+var WEEKDAYS_SHORT = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
 
 function parseDateParts(dateStr) {
   if (!dateStr || typeof dateStr !== 'string') return null;
@@ -264,7 +284,6 @@ function renderUpcoming() {
         person: idea.person || 'Без категории',
         occasion: idea.occasion || '',
         date: idea.date,
-        dateObj: occ,
         days: days,
         count: 0
       };
@@ -301,6 +320,153 @@ function renderUpcoming() {
 
   block.innerHTML = html;
   container.appendChild(block);
+}
+
+// ========== КАЛЕНДАРЬ ==========
+function canGoPrevMonth() {
+  var now = new Date();
+  return (calendarYear > now.getFullYear()) ||
+         (calendarYear === now.getFullYear() && calendarMonth > now.getMonth());
+}
+
+function prevMonth() {
+  if (!canGoPrevMonth()) return;
+  calendarMonth--;
+  if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
+  renderCalendar();
+}
+
+function nextMonth() {
+  calendarMonth++;
+  if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  var container = document.getElementById('calendar-container');
+  if (!container) return;
+
+  var ideas = loadIdeas();
+  var eventsByKey = {};
+
+  for (var i = 0; i < ideas.length; i++) {
+    var idea = ideas[i];
+    if (!idea.date) continue;
+    var p = parseDateParts(idea.date);
+    if (!p) continue;
+    var key = pad2(p.month + 1) + '-' + pad2(p.day);
+    if (!eventsByKey[key]) eventsByKey[key] = [];
+    eventsByKey[key].push(idea);
+  }
+
+  var html = '';
+
+  html += '<div class="cal-header">';
+  var prevDisabled = canGoPrevMonth() ? '' : ' disabled';
+  html += '<button type="button" class="cal-nav" onclick="prevMonth()"' + prevDisabled + '>←</button>';
+  html += '<div class="cal-title">' + MONTHS_NOM[calendarMonth] + ' ' + calendarYear + '</div>';
+  html += '<button type="button" class="cal-nav" onclick="nextMonth()">→</button>';
+  html += '</div>';
+
+  html += '<div class="cal-grid">';
+
+  for (var w = 0; w < 7; w++) {
+    html += '<div class="cal-weekday">' + WEEKDAYS_SHORT[w] + '</div>';
+  }
+
+  var firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
+  var offset = (firstDay + 6) % 7;
+  for (var o = 0; o < offset; o++) {
+    html += '<div class="cal-cell empty"></div>';
+  }
+
+  var daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (var day = 1; day <= daysInMonth; day++) {
+    var key2 = pad2(calendarMonth + 1) + '-' + pad2(day);
+    var events = eventsByKey[key2] || [];
+    var hasEvents = events.length > 0;
+    var isToday = (today.getFullYear() === calendarYear &&
+                   today.getMonth() === calendarMonth &&
+                   today.getDate() === day);
+
+    var cls = 'cal-cell';
+    if (isToday) cls += ' today';
+    if (hasEvents) cls += ' has-events';
+
+    html += '<div class="' + cls + '">';
+    html += '<div class="cal-day">' + day + '</div>';
+    if (hasEvents) {
+      html += '<div class="cal-dots">';
+      var dotsCount = Math.min(events.length, 3);
+      for (var dd = 0; dd < dotsCount; dd++) {
+        html += '<span class="cal-dot"></span>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+
+  var monthEvents = [];
+  for (var d2 = 1; d2 <= daysInMonth; d2++) {
+    var k2 = pad2(calendarMonth + 1) + '-' + pad2(d2);
+    if (eventsByKey[k2]) {
+      for (var e = 0; e < eventsByKey[k2].length; e++) {
+        monthEvents.push({ day: d2, idea: eventsByKey[k2][e] });
+      }
+    }
+  }
+
+  if (monthEvents.length > 0) {
+    html += '<div class="cal-events">';
+    html += '<h3>События месяца</h3>';
+    for (var me = 0; me < monthEvents.length; me++) {
+      var ev = monthEvents[me];
+      html += '<div class="cal-event-item">';
+      html += '<div class="cal-event-date">' + ev.day + ' ' + MONTHS_GEN[calendarMonth] + '</div>';
+      html += '<div>';
+      html += '<div class="cal-event-person">' + escapeHtml(ev.idea.person) + '</div>';
+      if (ev.idea.occasion) {
+        html += '<div class="cal-event-occasion">' + escapeHtml(ev.idea.occasion) + '</div>';
+      }
+      html += '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  } else {
+    html += '<p class="cal-empty">В этом месяце событий нет.</p>';
+  }
+
+  container.innerHTML = html;
+}
+
+// ========== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ==========
+function switchView(view) {
+  currentView = view;
+  saveViewMode(view);
+
+  var listView = document.getElementById('view-list');
+  var calView = document.getElementById('view-calendar');
+  var tabList = document.getElementById('tab-list');
+  var tabCal = document.getElementById('tab-calendar');
+
+  if (view === 'calendar') {
+    listView.style.display = 'none';
+    calView.style.display = 'block';
+    tabList.classList.remove('active');
+    tabCal.classList.add('active');
+    renderCalendar();
+  } else {
+    listView.style.display = 'block';
+    calView.style.display = 'none';
+    tabList.classList.add('active');
+    tabCal.classList.remove('active');
+    render();
+  }
 }
 
 // ========== ФИЛЬТРЫ ==========
@@ -434,6 +600,7 @@ function handlePersonPhotoInput(event) {
       log('Фото обновлено: ' + person + ' (' + Math.round(dataUrl.length / 1024) + ' КБ)', 'ok');
       renderPeopleList();
       render();
+      if (currentView === 'calendar') renderCalendar();
     };
     img.src = e.target.result;
   };
@@ -449,6 +616,7 @@ function removePersonPhoto(person) {
   log('Фото удалено: ' + person, 'ok');
   renderPeopleList();
   render();
+  if (currentView === 'calendar') renderCalendar();
 }
 
 // ========== ФОРМА ==========
@@ -505,7 +673,7 @@ function handleSubmit(e) {
   try {
     var form = document.getElementById('idea-form');
     var data = {};
-    var inputs = form.querySelectorAll('input, select');
+    var inputs = form.querySelectorAll('input, select, textarea');
     for (var i = 0; i < inputs.length; i++) {
       if (inputs[i].type === 'file') continue;
       data[inputs[i].name] = (inputs[i].value || '').trim();
@@ -541,6 +709,7 @@ function handleSubmit(e) {
           ideas[j].link = data.link;
           ideas[j].image = data.image;
           ideas[j].price = data.price;
+          ideas[j].notes = data.notes;
           ideas[j].updatedAt = now;
           break;
         }
@@ -558,6 +727,7 @@ function handleSubmit(e) {
         link: data.link,
         image: data.image,
         price: data.price,
+        notes: data.notes,
         createdAt: now,
         updatedAt: now
       });
@@ -568,6 +738,7 @@ function handleSubmit(e) {
       setLastModified(now);
       closeForm();
       render();
+      if (currentView === 'calendar') renderCalendar();
     }
   } catch (err) {
     log('Ошибка в submit: ' + err.message, 'error');
@@ -730,6 +901,7 @@ function buildCard(idea) {
 
   if (idea.price) html += '<div class="price">' + escapeHtml(idea.price) + '</div>';
   if (idea.budget) html += '<div class="card-meta">Бюджет: ' + escapeHtml(idea.budget) + ' ₽</div>';
+  if (idea.notes) html += '<div class="card-notes">' + escapeHtml(idea.notes) + '</div>';
   if (idea.link) html += '<a href="' + escapeHtml(idea.link) + '" target="_blank" rel="noopener">Открыть ссылку</a>';
   html += '<div class="actions">';
   html += '<button type="button" class="' + (idea.bought ? 'bought' : '') + '" onclick="toggleBought(\'' + idea.id + '\')">' + (idea.bought ? '✓ Куплено' : 'Отметить купленным') + '</button>';
@@ -762,6 +934,7 @@ function toggleBought(id) {
   saveIdeas(ideas);
   setLastModified(now);
   render();
+  if (currentView === 'calendar') renderCalendar();
 }
 
 function editIdea(id) {
@@ -788,16 +961,11 @@ function editIdea(id) {
   form.querySelector('[name="title"]').value = idea.title || '';
   form.querySelector('[name="link"]').value = idea.link || '';
   form.querySelector('[name="price"]').value = idea.price || '';
-
-  if (idea.image) {
-    form.querySelector('[name="image"]').value = idea.image;
-    document.getElementById('image-preview').innerHTML = '<img src="' + idea.image + '">';
-    document.getElementById('clear-image-btn').style.display = 'inline-block';
-  }
+  form.querySelector('[name="notes"]').value = idea.notes || '';
 
   document.getElementById('form-title').textContent = 'Редактировать идею';
   openForm();
-  // openForm вызывает resetImageField — восстановим картинку после
+
   if (idea.image) {
     form.querySelector('[name="image"]').value = idea.image;
     document.getElementById('image-preview').innerHTML = '<img src="' + idea.image + '">';
@@ -812,6 +980,7 @@ function deleteIdea(id) {
   setLastModified(new Date().toISOString());
   log('Идея удалена', 'ok');
   render();
+  if (currentView === 'calendar') renderCalendar();
 }
 
 function resetAll() {
@@ -827,6 +996,7 @@ function resetAll() {
   document.getElementById('filter-not-bought').checked = false;
   log('Все данные удалены', 'ok');
   render();
+  if (currentView === 'calendar') renderCalendar();
 }
 
 // ========== СПРАВОЧНИК ЛЮДЕЙ ==========
@@ -906,56 +1076,18 @@ function deletePerson(person) {
   renderPeopleList();
   refreshPersonSelect();
   render();
-}
-
-// ========== SHARE TARGET ==========
-function handleShareTarget() {
-  var params;
-  try {
-    params = new URLSearchParams(window.location.search);
-  } catch (e) {
-    return false;
-  }
-
-  var sharedUrl = params.get('url') || '';
-  var sharedText = params.get('text') || '';
-  var sharedTitle = params.get('title') || '';
-
-  if (!sharedUrl && !sharedText && !sharedTitle) return false;
-
-  log('Share Target: url="' + sharedUrl + '", text="' + sharedText + '", title="' + sharedTitle + '"', 'ok');
-
-  try {
-    window.history.replaceState({}, '', window.location.pathname);
-  } catch (e) {}
-
-  if (!sharedUrl && sharedText) {
-    var match = sharedText.match(/https?:\/\/[^\s]+/);
-    if (match) {
-      sharedUrl = match[0];
-      sharedText = sharedText.replace(match[0], '').trim();
-    }
-  }
-
-  var titleValue = '';
-  if (sharedTitle && !/^https?:\/\//.test(sharedTitle)) {
-    titleValue = sharedTitle;
-  } else if (sharedText && !/^https?:\/\//.test(sharedText)) {
-    titleValue = sharedText;
-  }
-
-  setTimeout(function() {
-    openForm();
-    var form = document.getElementById('idea-form');
-    if (sharedUrl) form.querySelector('[name="link"]').value = sharedUrl;
-    if (titleValue) form.querySelector('[name="title"]').value = titleValue;
-    setStatus('🔗 Ссылка подставлена. Заполните остальное.', 'ok');
-  }, 150);
-
-  return true;
+  if (currentView === 'calendar') renderCalendar();
 }
 
 // ========== ЭКСПОРТ / ИМПОРТ / GITHUB ==========
+function openExportModal() {
+  document.getElementById('export-modal-overlay').style.display = 'flex';
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal-overlay').style.display = 'none';
+}
+
 function buildBackupObject() {
   return {
     version: 1,
@@ -966,29 +1098,51 @@ function buildBackupObject() {
   };
 }
 
+function downloadJsonFile(filename, jsonString) {
+  var blob = new Blob([jsonString], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function exportData() {
+  closeExportModal();
   try {
     var backup = buildBackupObject();
     var json = JSON.stringify(backup, null, 2);
-    var blob = new Blob([json], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'ideas.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadJsonFile('ideas.json', json);
     setLastModified(backup.lastModified);
     log('Экспортировано: ' + backup.ideas.length + ' идей', 'ok');
-    setStatus('📤 Файл ideas.json скачан. Загрузите его в GitHub.', 'ok');
+    setStatus('📤 ideas.json скачан. Загрузите его в корень репозитория.', 'ok');
   } catch (e) {
     log('Ошибка экспорта: ' + e.message, 'error');
     alert('Не удалось экспортировать данные.');
   }
 }
 
+function exportDataWithDate() {
+  closeExportModal();
+  try {
+    var backup = buildBackupObject();
+    var json = JSON.stringify(backup, null, 2);
+    var d = new Date();
+    var filename = 'ideas-' + d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + '.json';
+    downloadJsonFile(filename, json);
+    log('Архив сохранён: ' + filename, 'ok');
+    setStatus('📦 Архив ' + filename + ' скачан. Загрузите его в папку backups/.', 'ok');
+  } catch (e) {
+    log('Ошибка экспорта архива: ' + e.message, 'error');
+    alert('Не удалось сохранить архив.');
+  }
+}
+
 function importData() {
+  closeExportModal();
   document.getElementById('import-file-input').click();
 }
 
@@ -1025,6 +1179,7 @@ function handleImportFile(event) {
       log('Импортировано: ' + data.ideas.length + ' идей', 'ok');
       setStatus('📥 Импортировано ' + data.ideas.length + ' идей', 'ok');
       render();
+      if (currentView === 'calendar') renderCalendar();
     } catch (err) {
       log('Ошибка импорта: ' + err.message, 'error');
       alert('Не удалось импортировать: ' + err.message);
@@ -1074,6 +1229,7 @@ function fetchGitHubBackup() {
           log('Данные загружены из GitHub', 'ok');
           setStatus('✓ Загружено из GitHub (' + data.ideas.length + ' идей)', 'ok');
           render();
+          if (currentView === 'calendar') renderCalendar();
           return;
         } else {
           log('Пользователь отказался загружать');
@@ -1125,13 +1281,10 @@ function fetchGitHubBackup() {
 
     render();
 
-    var shared = handleShareTarget();
+    var initialView = loadViewMode();
+    switchView(initialView);
 
-    if (!shared) {
-      fetchGitHubBackup();
-    } else {
-      log('Share Target: авто-проверка GitHub отложена', 'ok');
-    }
+    fetchGitHubBackup();
 
     document.getElementById('form-overlay').addEventListener('click', function(e) {
       if (e.target.id === 'form-overlay') closeForm();
@@ -1139,6 +1292,10 @@ function fetchGitHubBackup() {
 
     document.getElementById('people-manager-overlay').addEventListener('click', function(e) {
       if (e.target.id === 'people-manager-overlay') closePeopleManager();
+    });
+
+    document.getElementById('export-modal-overlay').addEventListener('click', function(e) {
+      if (e.target.id === 'export-modal-overlay') closeExportModal();
     });
   } catch (err) {
     log('Критическая ошибка запуска: ' + err.message, 'error');
@@ -1163,7 +1320,13 @@ window.openPeopleManager = openPeopleManager;
 window.closePeopleManager = closePeopleManager;
 window.deletePerson = deletePerson;
 window.exportData = exportData;
+window.exportDataWithDate = exportDataWithDate;
 window.importData = importData;
 window.handleImportFile = handleImportFile;
 window.pickPersonPhoto = pickPersonPhoto;
 window.removePersonPhoto = removePersonPhoto;
+window.openExportModal = openExportModal;
+window.closeExportModal = closeExportModal;
+window.switchView = switchView;
+window.prevMonth = prevMonth;
+window.nextMonth = nextMonth;
