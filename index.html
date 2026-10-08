@@ -15,6 +15,7 @@
   <header>
     <h1>🎁 Идеи подарков</h1>
     <div class="header-actions">
+      <button type="button" onclick="openPeopleManager()" title="Справочник людей">⚙️</button>
       <button type="button" onclick="exportData()" title="Скачать JSON">📤</button>
       <button type="button" onclick="importData()" title="Загрузить JSON">📥</button>
       <button type="button" onclick="resetAll()" title="Сбросить всё">⟲</button>
@@ -112,6 +113,7 @@
   </div>
 
   <input type="file" id="import-file-input" accept="application/json,.json" style="display:none" onchange="handleImportFile(event)">
+  <input type="file" id="person-photo-input" accept="image/*" style="display:none">
 
   <script src="app.js"></script>
 </body>
