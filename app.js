@@ -378,11 +378,21 @@ function handleImagePick(event) {
 }
 
 function clearImage() {
-  document.querySelector('#idea-form [name="image"]').value = '';
-  document.querySelector('#idea-form [name="imageFile"]').value = '';
-  document.getElementById('image-preview').innerHTML = '';
-  document.getElementById('clear-image-btn').style.display = 'none';
+  resetImageField();
   log('Картинка убрана');
+}
+
+function resetImageField() {
+  var form = document.getElementById('idea-form');
+  if (!form) return;
+  var imageInput = form.querySelector('[name="image"]');
+  var fileInput = form.querySelector('[name="imageFile"]');
+  if (imageInput) imageInput.value = '';
+  if (fileInput) fileInput.value = '';
+  var preview = document.getElementById('image-preview');
+  if (preview) preview.innerHTML = '';
+  var clearBtn = document.getElementById('clear-image-btn');
+  if (clearBtn) clearBtn.style.display = 'none';
 }
 
 // ========== ФОТО ЧЕЛОВЕКА ==========
@@ -445,6 +455,7 @@ function removePersonPhoto(person) {
 function openForm() {
   log('Открываю форму');
   refreshPersonSelect();
+  resetImageField();
   document.getElementById('form-overlay').style.display = 'flex';
 }
 
@@ -454,8 +465,7 @@ function closeForm() {
   document.getElementById('idea-form').reset();
   document.getElementById('idea-form').querySelector('[name="id"]').value = '';
   document.getElementById('form-title').textContent = 'Новая идея';
-  document.getElementById('image-preview').innerHTML = '';
-  document.getElementById('clear-image-btn').style.display = 'none';
+  resetImageField();
   document.getElementById('new-person-block').style.display = 'none';
   document.getElementById('toggle-new-person-btn').style.display = 'inline-block';
 }
@@ -767,6 +777,7 @@ function editIdea(id) {
   }
 
   refreshPersonSelect();
+  resetImageField();
 
   var form = document.getElementById('idea-form');
   form.querySelector('[name="id"]').value = idea.id;
@@ -776,19 +787,22 @@ function editIdea(id) {
   form.querySelector('[name="budget"]').value = idea.budget || '';
   form.querySelector('[name="title"]').value = idea.title || '';
   form.querySelector('[name="link"]').value = idea.link || '';
-  form.querySelector('[name="image"]').value = idea.image || '';
   form.querySelector('[name="price"]').value = idea.price || '';
 
   if (idea.image) {
+    form.querySelector('[name="image"]').value = idea.image;
     document.getElementById('image-preview').innerHTML = '<img src="' + idea.image + '">';
     document.getElementById('clear-image-btn').style.display = 'inline-block';
-  } else {
-    document.getElementById('image-preview').innerHTML = '';
-    document.getElementById('clear-image-btn').style.display = 'none';
   }
 
   document.getElementById('form-title').textContent = 'Редактировать идею';
   openForm();
+  // openForm вызывает resetImageField — восстановим картинку после
+  if (idea.image) {
+    form.querySelector('[name="image"]').value = idea.image;
+    document.getElementById('image-preview').innerHTML = '<img src="' + idea.image + '">';
+    document.getElementById('clear-image-btn').style.display = 'inline-block';
+  }
 }
 
 function deleteIdea(id) {
@@ -915,7 +929,6 @@ function handleShareTarget() {
     window.history.replaceState({}, '', window.location.pathname);
   } catch (e) {}
 
-  // Если нет URL, но в text есть ссылка — вытащим
   if (!sharedUrl && sharedText) {
     var match = sharedText.match(/https?:\/\/[^\s]+/);
     if (match) {
