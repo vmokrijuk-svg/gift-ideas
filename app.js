@@ -6,13 +6,15 @@ var UPCOMING_MAX_ITEMS = 5;
 // ========== КЛЮЧИ ХРАНИЛИЩА ==========
 var STORAGE_KEY = 'giftIdeas';
 var PEOPLE_KEY = 'giftPeople';
+var PHOTOS_KEY = 'giftPeoplePhotos';
 var COLLAPSED_KEY = 'giftCollapsedGroups';
 var SORT_KEY = 'giftSortMode';
 var LAST_MODIFIED_KEY = 'giftLastModified';
 
-// ========== СОСТОЯНИЕ ФИЛЬТРОВ ==========
+// ========== СОСТОЯНИЕ ==========
 var searchQuery = '';
 var filterNotBought = false;
+var currentPhotoPerson = null;
 
 // ========== ЛОГ ==========
 function log(msg, type) {
@@ -85,6 +87,30 @@ function savePeople(people) {
     log('Ошибка записи людей: ' + e.message, 'error');
     return false;
   }
+}
+
+function loadPersonPhotos() {
+  try {
+    var raw = localStorage.getItem(PHOTOS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function savePersonPhotos(obj) {
+  try {
+    localStorage.setItem(PHOTOS_KEY, JSON.stringify(obj));
+    return true;
+  } catch (e) {
+    log('Ошибка записи фото: ' + e.message, 'error');
+    return false;
+  }
+}
+
+function getPersonPhoto(person) {
+  var photos = loadPersonPhotos();
+  return photos[person] || '';
 }
 
 function loadCollapsed() {
@@ -164,7 +190,6 @@ function sumPrices(ideas) {
 var MONTHS_GEN = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 
 function parseDateParts(dateStr) {
-  // Ожидаем "YYYY-MM-DD"
   if (!dateStr || typeof dateStr !== 'string') return null;
   var parts = dateStr.split('-');
   if (parts.length !== 3) return null;
@@ -358,6 +383,62 @@ function clearImage() {
   document.getElementById('image-preview').innerHTML = '';
   document.getElementById('clear-image-btn').style.display = 'none';
   log('Картинка убрана');
+}
+
+// ========== ФОТО ЧЕЛОВЕКА ==========
+function pickPersonPhoto(person) {
+  currentPhotoPerson = person;
+  document.getElementById('person-photo-input').click();
+}
+
+function handlePersonPhotoInput(event) {
+  if (!currentPhotoPerson) return;
+  var file = event.target.files && event.target.files[0];
+  if (!file) {
+    currentPhotoPerson = null;
+    return;
+  }
+
+  var person = currentPhotoPerson;
+  log('Фото для ' + person + ': ' + Math.round(file.size / 1024) + ' КБ');
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var maxSide = 200;
+      var w = img.width;
+      var h = img.height;
+      if (w > h && w > maxSide) { h = h * maxSide / w; w = maxSide; }
+      else if (h > maxSide) { w = w * maxSide / h; h = maxSide; }
+
+      var canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+      var photos = loadPersonPhotos();
+      photos[person] = dataUrl;
+      savePersonPhotos(photos);
+      log('Фото обновлено: ' + person + ' (' + Math.round(dataUrl.length / 1024) + ' КБ)', 'ok');
+      renderPeopleList();
+      render();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+  currentPhotoPerson = null;
+}
+
+function removePersonPhoto(person) {
+  var photos = loadPersonPhotos();
+  delete photos[person];
+  savePersonPhotos(photos);
+  log('Фото удалено: ' + person, 'ok');
+  renderPeopleList();
+  render();
 }
 
 // ========== ФОРМА ==========
@@ -589,11 +670,18 @@ function render() {
       if (boughtCount > 0) metaParts.push(boughtCount + ' куплено');
       if (personSum > 0) metaParts.push(formatSum(personSum));
 
+      var avatarHtml = '';
+      var photo = getPersonPhoto(person);
+      if (photo) {
+        avatarHtml = '<img src="' + photo + '" class="group-avatar" alt="">';
+      }
+
       var header = document.createElement('div');
       header.className = 'group-header';
       header.setAttribute('onclick', "toggleGroup('" + person.replace(/'/g, "\\'") + "')");
       header.innerHTML =
         '<span class="toggle-icon">▼</span>' +
+        avatarHtml +
         '<h2>' + escapeHtml(person) + '</h2>' +
         '<span class="group-meta">' + metaParts.join(' · ') + '</span>';
       group.appendChild(header);
@@ -617,7 +705,7 @@ function render() {
 
 function buildCard(idea) {
   var card = document.createElement('div');
-  card.className = 'card';
+  card.className = 'card' + (idea.bought ? ' bought' : '');
 
   var html = '';
   if (idea.image) html += '<img src="' + escapeHtml(idea.image) + '" alt="">';
@@ -713,9 +801,10 @@ function deleteIdea(id) {
 }
 
 function resetAll() {
-  if (!confirm('Удалить ВСЕ идеи и справочник? Это нельзя отменить.')) return;
+  if (!confirm('Удалить ВСЕ идеи, справочник и фото? Это нельзя отменить.')) return;
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(PEOPLE_KEY);
+  localStorage.removeItem(PHOTOS_KEY);
   localStorage.removeItem(COLLAPSED_KEY);
   localStorage.removeItem(LAST_MODIFIED_KEY);
   searchQuery = '';
@@ -728,6 +817,7 @@ function resetAll() {
 
 // ========== СПРАВОЧНИК ЛЮДЕЙ ==========
 function openPeopleManager() {
+  log('Открываю справочник');
   renderPeopleList();
   document.getElementById('people-manager-overlay').style.display = 'flex';
 }
@@ -740,10 +830,11 @@ function renderPeopleList() {
   var list = document.getElementById('people-list');
   var people = loadPeople();
   var ideas = loadIdeas();
+  var photos = loadPersonPhotos();
   list.innerHTML = '';
 
   if (people.length === 0) {
-    list.innerHTML = '<p style="color:#86868b">Справочник пуст.</p>';
+    list.innerHTML = '<p style="color:#86868b">Справочник пуст. Добавьте человека через форму новой идеи.</p>';
     return;
   }
 
@@ -754,12 +845,29 @@ function renderPeopleList() {
       if (ideas[j].person === person) count++;
     }
 
+    var avatarHtml = photos[person]
+      ? '<img src="' + photos[person] + '" class="person-avatar" alt="">'
+      : '<div class="person-avatar person-avatar-placeholder">' + escapeHtml((person.charAt(0) || '?').toUpperCase()) + '</div>';
+
+    var escapedPerson = person.replace(/'/g, "\\'");
+
     var row = document.createElement('div');
     row.className = 'person-row';
-    var btnDisabled = count > 0 ? 'disabled title="Есть идеи для этого человека"' : '';
+
+    var actionsHtml = '';
+    actionsHtml += '<button type="button" onclick="pickPersonPhoto(\'' + escapedPerson + '\')" title="Загрузить фото">📷</button>';
+    if (photos[person]) {
+      actionsHtml += '<button type="button" onclick="removePersonPhoto(\'' + escapedPerson + '\')" title="Убрать фото">✕</button>';
+    }
+    actionsHtml += '<button type="button" class="danger" onclick="deletePerson(\'' + escapedPerson + '\')" ' + (count > 0 ? 'disabled title="Есть идеи для этого человека"' : '') + '>Удалить</button>';
+
     row.innerHTML =
-      '<span>' + escapeHtml(person) + ' <span style="color:#86868b;font-size:12px">(' + count + ')</span></span>' +
-      '<button type="button" onclick="deletePerson(\'' + person.replace(/'/g, "\\'") + '\')" ' + btnDisabled + '>Удалить</button>';
+      '<div class="person-info">' +
+        avatarHtml +
+        '<span>' + escapeHtml(person) + ' <span style="color:#86868b;font-size:12px">(' + count + ')</span></span>' +
+      '</div>' +
+      '<div class="person-actions">' + actionsHtml + '</div>';
+
     list.appendChild(row);
   }
 }
@@ -777,9 +885,61 @@ function deletePerson(person) {
   if (!confirm('Удалить "' + person + '" из справочника?')) return;
   var people = loadPeople().filter(function(p) { return p !== person; });
   savePeople(people);
+  var photos = loadPersonPhotos();
+  delete photos[person];
+  savePersonPhotos(photos);
   log('Человек удалён: ' + person, 'ok');
   renderPeopleList();
   refreshPersonSelect();
+  render();
+}
+
+// ========== SHARE TARGET ==========
+function handleShareTarget() {
+  var params;
+  try {
+    params = new URLSearchParams(window.location.search);
+  } catch (e) {
+    return false;
+  }
+
+  var sharedUrl = params.get('url') || '';
+  var sharedText = params.get('text') || '';
+  var sharedTitle = params.get('title') || '';
+
+  if (!sharedUrl && !sharedText && !sharedTitle) return false;
+
+  log('Share Target: url="' + sharedUrl + '", text="' + sharedText + '", title="' + sharedTitle + '"', 'ok');
+
+  try {
+    window.history.replaceState({}, '', window.location.pathname);
+  } catch (e) {}
+
+  // Если нет URL, но в text есть ссылка — вытащим
+  if (!sharedUrl && sharedText) {
+    var match = sharedText.match(/https?:\/\/[^\s]+/);
+    if (match) {
+      sharedUrl = match[0];
+      sharedText = sharedText.replace(match[0], '').trim();
+    }
+  }
+
+  var titleValue = '';
+  if (sharedTitle && !/^https?:\/\//.test(sharedTitle)) {
+    titleValue = sharedTitle;
+  } else if (sharedText && !/^https?:\/\//.test(sharedText)) {
+    titleValue = sharedText;
+  }
+
+  setTimeout(function() {
+    openForm();
+    var form = document.getElementById('idea-form');
+    if (sharedUrl) form.querySelector('[name="link"]').value = sharedUrl;
+    if (titleValue) form.querySelector('[name="title"]').value = titleValue;
+    setStatus('🔗 Ссылка подставлена. Заполните остальное.', 'ok');
+  }, 150);
+
+  return true;
 }
 
 // ========== ЭКСПОРТ / ИМПОРТ / GITHUB ==========
@@ -788,7 +948,8 @@ function buildBackupObject() {
     version: 1,
     lastModified: new Date().toISOString(),
     ideas: loadIdeas(),
-    people: loadPeople()
+    people: loadPeople(),
+    peoplePhotos: loadPersonPhotos()
   };
 }
 
@@ -838,6 +999,9 @@ function handleImportFile(event) {
       saveIdeas(data.ideas);
       if (data.people && Array.isArray(data.people)) {
         savePeople(data.people);
+      }
+      if (data.peoplePhotos && typeof data.peoplePhotos === 'object') {
+        savePersonPhotos(data.peoplePhotos);
       }
       if (data.lastModified) {
         setLastModified(data.lastModified);
@@ -890,6 +1054,9 @@ function fetchGitHubBackup() {
           if (data.people && Array.isArray(data.people)) {
             savePeople(data.people);
           }
+          if (data.peoplePhotos && typeof data.peoplePhotos === 'object') {
+            savePersonPhotos(data.peoplePhotos);
+          }
           setLastModified(remoteTime);
           log('Данные загружены из GitHub', 'ok');
           setStatus('✓ Загружено из GitHub (' + data.ideas.length + ' идей)', 'ok');
@@ -941,9 +1108,17 @@ function fetchGitHubBackup() {
 
     document.getElementById('search-input').addEventListener('input', onSearchInput);
 
+    document.getElementById('person-photo-input').addEventListener('change', handlePersonPhotoInput);
+
     render();
 
-    fetchGitHubBackup();
+    var shared = handleShareTarget();
+
+    if (!shared) {
+      fetchGitHubBackup();
+    } else {
+      log('Share Target: авто-проверка GitHub отложена', 'ok');
+    }
 
     document.getElementById('form-overlay').addEventListener('click', function(e) {
       if (e.target.id === 'form-overlay') closeForm();
@@ -977,3 +1152,5 @@ window.deletePerson = deletePerson;
 window.exportData = exportData;
 window.importData = importData;
 window.handleImportFile = handleImportFile;
+window.pickPersonPhoto = pickPersonPhoto;
+window.removePersonPhoto = removePersonPhoto;
