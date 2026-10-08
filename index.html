@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Мои идеи подарков</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>🎁 Идеи подарков</h1>
+    <div class="header-actions">
+      <button type="button" onclick="exportData()" title="Скачать JSON">📤</button>
+      <button type="button" onclick="importData()" title="Загрузить JSON">📥</button>
+      <button type="button" onclick="resetAll()" title="Сбросить всё">⟲</button>
+      <button type="button" onclick="openForm()">+ Добавить</button>
+    </div>
+  </header>
+
+  <div id="status-bar"></div>
+
+  <div id="form-overlay" style="display:none">
+    <form id="idea-form" onsubmit="return handleSubmit(event)">
+      <input type="hidden" name="id" value="">
+      <h2 id="form-title">Новая идея</h2>
+
+      <label>Для кого:
+        <select name="person" id="person-select"></select>
+      </label>
+
+      <div id="new-person-block" style="display:none">
+        <label>Новый человек:
+          <input type="text" name="newPerson" placeholder="Имя">
+        </label>
+      </div>
+
+      <button type="button" onclick="toggleNewPerson()" id="toggle-new-person-btn">+ Новый человек</button>
+
+      <label>Повод:
+        <input type="text" name="occasion" placeholder="День рождения, Новый год...">
+      </label>
+      <label>Бюджет (₽):
+        <input type="number" name="budget" placeholder="5000">
+      </label>
+      <label>Название / описание:
+        <input type="text" name="title" placeholder="Например: беспроводные наушники">
+      </label>
+      <label>Ссылка:
+        <input type="url" name="link" placeholder="https://...">
+      </label>
+      <label>Картинка:
+        <input type="file" name="imageFile" accept="image/*" onchange="handleImagePick(event)">
+      </label>
+      <input type="hidden" name="image" value="">
+      <div id="image-preview"></div>
+      <button type="button" onclick="clearImage()" id="clear-image-btn" style="display:none">Убрать картинку</button>
+      <label>Цена:
+        <input type="text" name="price" placeholder="4 990 ₽">
+      </label>
+
+      <div class="form-actions">
+        <button type="button" onclick="closeForm()">Отмена</button>
+        <button type="submit">Сохранить</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="people-manager-overlay" style="display:none">
+    <div id="people-manager">
+      <h2>Справочник людей</h2>
+      <div id="people-list"></div>
+      <div class="form-actions">
+        <button type="button" onclick="closePeopleManager()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <main id="ideas-container"></main>
+
+  <div id="debug-log">
+    <div class="log-header">
+      <span>Журнал</span>
+      <button type="button" onclick="document.getElementById('debug-log').classList.remove('visible')">×</button>
+    </div>
+    <div id="log-content"></div>
+  </div>
+
+  <input type="file" id="import-file-input" accept="application/json,.json" style="display:none" onchange="handleImportFile(event)">
+
+  <script src="app.js"></script>
+</body>
+</html>
