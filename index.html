@@ -24,8 +24,10 @@
 
   <div id="status-bar"></div>
 
+  <div id="upcoming"></div>
+
   <div id="toolbar">
-<input type="search" id="search-input" placeholder="Поиск по имени, названию, поводу..." autocomplete="off">
+    <input type="search" id="search-input" placeholder="Поиск по имени, названию, поводу..." autocomplete="off">
     <label class="filter-label">
       <input type="checkbox" id="filter-not-bought">
       Только не купленные
@@ -58,6 +60,11 @@
       <label>Повод:
         <input type="text" name="occasion" placeholder="День рождения, Новый год...">
       </label>
+
+      <label>Дата праздника (необязательно):
+        <input type="date" name="date">
+      </label>
+
       <label>Бюджет (₽):
         <input type="number" name="budget" placeholder="5000">
       </label>
